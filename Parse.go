@@ -27,29 +27,33 @@ func Parse(url string) ([]RrssFeed, error) {
 
 	fp := gofeed.NewParser()
 	feed, err := fp.ParseURL(url)
-
 	if err != nil {
+		log.Println(err.Error())
 		return nil, err
 	}
+	log.Printf("Parsing %v", feed.Title)
+	log.Printf("Found %v items in feed", len(feed.Items))
 
 	// Build Feed objects
-	feedItems := make([]RrssFeed, len(feed.Items))
+	feedItems := make([]RrssFeed, 0)
 	for _, item := range feed.Items {
 		id, err := generateId(item)
 		if err != nil {
+			log.Println("Failed to generate ID for item")
 			return nil, err
 		}
 
-		parsedFeed := RrssFeed{
+		feedItems = append(feedItems, RrssFeed{
 			Id:        id,
 			FeedUrl:   string(url),
 			FeedTitle: string(feed.Title),
 			ItemBody:  item.Description,
 			ItemUrl:   item.Link,
 			Created:   time.Now(),
-		}
-		feedItems = append(feedItems, parsedFeed)
+		})
+		log.Printf("Id=%v : Url=%v : Title=%v", id, string(url), string(feed.Title))
 	}
+	log.Printf("Parsed %v items", len(feedItems))
 	return feedItems, nil
 }
 
