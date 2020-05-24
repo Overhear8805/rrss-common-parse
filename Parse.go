@@ -57,6 +57,7 @@ func Parse(url string) ([]RrssFeed, error) {
 	wg.Add(sliceLength)
 	for i := 0; i < sliceLength; i++ {
 		go func(i int) {
+			defer wg.Done()
 			item := feed.Items[i]
 			// Generate ID for the item
 			id, err := generateId(item)
