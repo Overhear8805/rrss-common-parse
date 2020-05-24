@@ -54,7 +54,6 @@ func Parse(url string) ([]RrssFeed, error) {
 	feedItems := make([]RrssFeed, 0)
 	sliceLength := len(feed.Items)
 	var wg sync.WaitGroup
-
 	wg.Add(sliceLength)
 	for i := 0; i < sliceLength; i++ {
 		go func(i int) {
@@ -66,10 +65,17 @@ func Parse(url string) ([]RrssFeed, error) {
 			}
 
 			// Fetch full article
-			extended, err := getExtendedArticle(item.Link)
-			if err != nil {
-				extended = ""
-				log.Println(err)
+			var extended = ""
+			itemUrl := item.Link
+			if len(itemUrl) > 0 {
+				log.Printf("Fetching extended article for '%s'", itemUrl)
+				extended, err = getExtendedArticle(itemUrl)
+				if err != nil {
+					extended = ""
+					log.Println(err)
+				}
+			} else {
+				log.Printf("Item has no link, skip fetching extended (id '%s', title '%s')", id, item.Title)
 			}
 
 			// Strip html from body and extended body
@@ -87,7 +93,7 @@ func Parse(url string) ([]RrssFeed, error) {
 				Created:   time.Now(),
 			})
 
-			log.Printf("Id=%v : Url=%v : Title=%v", id, string(url), string(feed.Title))
+			log.Printf("Id=%v : Url=%v : Title=%v Extended (char count)=%v", id, string(url), string(feed.Title), len(extended))
 		}(i)
 	}
 
@@ -136,6 +142,7 @@ func getExtendedArticle(link string) (string, error) {
 			return "", err
 		}
 		bodyString := string(bodyBytes)
+		log.Printf("Got %d. Body is %d chars long", response.StatusCode, len(bodyString))
 		return bodyString, nil
 	}
 	return "", errors.New(fmt.Sprintf("Expected 2XX status code but received '%d'", response.StatusCode))
