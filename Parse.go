@@ -3,13 +3,28 @@ package parse
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/mmcdole/gofeed"
+
+	"github.com/k3a/html2text"
 )
+
+var tr = &http.Transport{
+	IdleConnTimeout: 5 * time.Second,
+}
+
+var client = &http.Client{
+	Transport: tr,
+}
 
 type RrssFeed struct {
 	Id        string
@@ -18,6 +33,7 @@ type RrssFeed struct {
 	ItemTitle string
 	ItemBody  string
 	ItemUrl   string
+	Extended  string
 	Created   time.Time
 }
 
@@ -36,23 +52,46 @@ func Parse(url string) ([]RrssFeed, error) {
 
 	// Build Feed objects
 	feedItems := make([]RrssFeed, 0)
-	for _, item := range feed.Items {
-		id, err := generateId(item)
-		if err != nil {
-			log.Println("Failed to generate ID for item")
-			return nil, err
-		}
+	sliceLength := len(feed.Items)
+	var wg sync.WaitGroup
 
-		feedItems = append(feedItems, RrssFeed{
-			Id:        id,
-			FeedUrl:   string(url),
-			FeedTitle: string(feed.Title),
-			ItemBody:  item.Description,
-			ItemUrl:   item.Link,
-			Created:   time.Now(),
-		})
-		log.Printf("Id=%v : Url=%v : Title=%v", id, string(url), string(feed.Title))
+	wg.Add(sliceLength)
+	for i := 0; i < sliceLength; i++ {
+		go func(i int) {
+			item := feed.Items[i]
+			// Generate ID for the item
+			id, err := generateId(item)
+			if err != nil {
+				log.Fatal("Failed to generate ID for item", err)
+			}
+
+			// Fetch full article
+			extended, err := getExtendedArticle(item.Link)
+			if err != nil {
+				extended = ""
+				log.Println(err)
+			}
+
+			// Strip html from body and extended body
+			item.Description = html2text.HTML2Text(item.Description)
+			extended = html2text.HTML2Text(extended)
+
+			// Put it in the array
+			feedItems = append(feedItems, RrssFeed{
+				Id:        id,
+				FeedUrl:   string(url),
+				FeedTitle: string(feed.Title),
+				ItemBody:  item.Description,
+				ItemUrl:   item.Link,
+				Extended:  extended,
+				Created:   time.Now(),
+			})
+
+			log.Printf("Id=%v : Url=%v : Title=%v", id, string(url), string(feed.Title))
+		}(i)
 	}
+
+	wg.Wait()
 	log.Printf("Parsed %v items", len(feedItems))
 	return feedItems, nil
 }
@@ -83,4 +122,21 @@ func generateId(item *gofeed.Item) (string, error) {
 	}
 
 	return uuid.String(), nil
+}
+
+func getExtendedArticle(link string) (string, error) {
+	response, err := http.Get(link)
+	if err != nil {
+		return "", err
+	}
+
+	if response.StatusCode >= 200 && response.StatusCode <= 299 {
+		bodyBytes, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			return "", err
+		}
+		bodyString := string(bodyBytes)
+		return bodyString, nil
+	}
+	return "", errors.New(fmt.Sprintf("Expected 2XX status code but received '%d'", response.StatusCode))
 }
