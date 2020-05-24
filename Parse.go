@@ -98,7 +98,7 @@ func Parse(url string) ([]RrssFeed, error) {
 	}
 
 	wg.Wait()
-	log.Printf("Parsed %v items", len(feedItems))
+	log.Printf("Parsed %v items in %s", len(feedItems), url)
 	return feedItems, nil
 }
 
@@ -142,7 +142,7 @@ func getExtendedArticle(link string) (string, error) {
 			return "", err
 		}
 		bodyString := string(bodyBytes)
-		log.Printf("Got %d. Body is %d chars long", response.StatusCode, len(bodyString))
+		log.Printf("%s responded with status code %d. Body is %d chars long", link, response.StatusCode, len(bodyString))
 		return bodyString, nil
 	}
 	return "", errors.New(fmt.Sprintf("Expected 2XX status code but received '%d'", response.StatusCode))
