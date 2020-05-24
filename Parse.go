@@ -5,18 +5,19 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/google/uuid"
+	"github.com/microcosm-cc/bluemonday"
 
 	"github.com/mmcdole/gofeed"
-
-	"github.com/k3a/html2text"
 )
+
+var p = bluemonday.UGCPolicy()
 
 var tr = &http.Transport{
 	IdleConnTimeout: 5 * time.Second,
@@ -70,7 +71,7 @@ func Parse(url string) ([]RrssFeed, error) {
 			itemUrl := item.Link
 			if len(itemUrl) > 0 {
 				log.Printf("Fetching extended article for '%s'", itemUrl)
-				extended, err = getExtendedArticle(itemUrl)
+				extended, err = GetExtendedArticle(itemUrl)
 				if err != nil {
 					extended = ""
 					log.Println(err)
@@ -80,8 +81,8 @@ func Parse(url string) ([]RrssFeed, error) {
 			}
 
 			// Strip html from body and extended body
-			item.Description = html2text.HTML2Text(item.Description)
-			extended = html2text.HTML2Text(extended)
+			item.Description = p.Sanitize(item.Description)
+			extended = p.Sanitize(extended)
 
 			// Put it in the array
 			feedItems = append(feedItems, RrssFeed{
@@ -94,7 +95,7 @@ func Parse(url string) ([]RrssFeed, error) {
 				Created:   time.Now(),
 			})
 
-			log.Printf("Id=%v : Url=%v : Title=%v Extended (char count)=%v", id, string(url), string(feed.Title), len(extended))
+			log.Printf("Id=%v : Url=%v : Title=%v Extended (char count)=%v Item no: %d/%d", id, string(url), string(feed.Title), len(extended), i, sliceLength)
 		}(i)
 	}
 
@@ -131,20 +132,37 @@ func generateId(item *gofeed.Item) (string, error) {
 	return uuid.String(), nil
 }
 
-func getExtendedArticle(link string) (string, error) {
+func GetExtendedArticle(link string) (string, error) {
 	response, err := http.Get(link)
 	if err != nil {
 		return "", err
 	}
 
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer response.Body.Close()
+
 	if response.StatusCode >= 200 && response.StatusCode <= 299 {
-		bodyBytes, err := ioutil.ReadAll(response.Body)
+		doc, err := goquery.NewDocumentFromResponse(response)
 		if err != nil {
+			log.Printf("Failed to parse body as HTML")
 			return "", err
 		}
-		bodyString := string(bodyBytes)
-		log.Printf("%s responded with status code %d. Body is %d chars long", link, response.StatusCode, len(bodyString))
-		return bodyString, nil
+
+		article := ""
+		doc.Find("article").Each(func(i int, s *goquery.Selection) {
+			articleHtml, _ := s.Html() //underscore is an error
+			sanitized := p.Sanitize(articleHtml)
+
+			// Pick the largest article
+			if len(sanitized) > len(article) {
+				article = sanitized
+			}
+		})
+		log.Printf("%s responded with status code %d. Body is %d chars long", link, response.StatusCode, len(article))
+		return article, nil
 	}
 	return "", errors.New(fmt.Sprintf("Expected 2XX status code but received '%d'", response.StatusCode))
 }
