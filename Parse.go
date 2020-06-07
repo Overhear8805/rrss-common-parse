@@ -34,6 +34,7 @@ type RrssFeed struct {
 	ItemTitle string
 	ItemBody  string
 	ItemUrl   string
+	Published string
 	Extended  string
 	Created   time.Time
 }
@@ -91,6 +92,7 @@ func Parse(url string) ([]RrssFeed, error) {
 				FeedTitle: string(feed.Title),
 				ItemBody:  item.Description,
 				ItemUrl:   item.Link,
+				Published: item.Published,
 				Extended:  extended,
 				Created:   time.Now(),
 			})
