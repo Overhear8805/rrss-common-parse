@@ -85,20 +85,22 @@ func Parse(url string) ([]RrssFeed, error) {
 				itemExtended = article.CleanedText
 				itemRawHtml = article.RawHTML
 				itemImage = article.TopImage
+
+				time.Sleep(1 * time.Second) // Wait for 1 second before getting next item
 			} else {
 				log.Printf("Item has no link, skip fetching extended (id '%s', title '%s')", id, item.Title)
 			}
 
 			itemExtended = p.Sanitize(itemExtended)
 			// Strip html from body and extended body
-			item.Description = p.Sanitize(item.Description)
+			itemDescription := p.Sanitize(item.Description)
 
 			// Put it in the array
 			feedItems = append(feedItems, RrssFeed{
 				Id:               id,
 				FeedUrl:          string(url),
 				FeedTitle:        string(feed.Title),
-				ItemBody:         item.Description,
+				ItemBody:         itemDescription,
 				ItemUrl:          item.Link,
 				Published:        item.Published,
 				ItemExtendedBody: itemExtended,
