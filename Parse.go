@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	goose "github.com/advancedlogic/GoOse"
 	"github.com/google/uuid"
 	"github.com/microcosm-cc/bluemonday"
 
@@ -18,6 +19,7 @@ import (
 )
 
 var p = bluemonday.UGCPolicy()
+var g = goose.New()
 
 var tr = &http.Transport{
 	IdleConnTimeout: 5 * time.Second,
@@ -28,15 +30,17 @@ var client = &http.Client{
 }
 
 type RrssFeed struct {
-	Id        string
-	FeedUrl   string
-	FeedTitle string
-	ItemTitle string
-	ItemBody  string
-	ItemUrl   string
-	Published string
-	Extended  string
-	Created   time.Time
+	Id               string
+	FeedUrl          string
+	FeedTitle        string
+	ItemImage        string
+	ItemTitle        string
+	ItemBody         string
+	ItemUrl          string
+	ItemExtendedBody string
+	ItemRawHtml      string
+	Published        string
+	Created          time.Time
 }
 
 func Parse(url string) ([]RrssFeed, error) {
@@ -67,37 +71,43 @@ func Parse(url string) ([]RrssFeed, error) {
 				log.Fatal("Failed to generate ID for item", err)
 			}
 
+			itemExtended := ""
+			itemRawHtml := ""
+			itemImage := ""
 			// Fetch full article
-			var extended = ""
 			itemUrl := item.Link
 			if len(itemUrl) > 0 {
 				log.Printf("Fetching extended article for '%s'", itemUrl)
-				extended, err = GetExtendedArticle(itemUrl)
+				article, err := extractArticle(itemUrl)
 				if err != nil {
-					extended = ""
 					log.Println(err)
 				}
+				itemExtended = article.CleanedText
+				itemRawHtml = article.RawHTML
+				itemImage = article.TopImage
 			} else {
 				log.Printf("Item has no link, skip fetching extended (id '%s', title '%s')", id, item.Title)
 			}
 
+			itemExtended = p.Sanitize(itemExtended)
 			// Strip html from body and extended body
 			item.Description = p.Sanitize(item.Description)
-			extended = p.Sanitize(extended)
 
 			// Put it in the array
 			feedItems = append(feedItems, RrssFeed{
-				Id:        id,
-				FeedUrl:   string(url),
-				FeedTitle: string(feed.Title),
-				ItemBody:  item.Description,
-				ItemUrl:   item.Link,
-				Published: item.Published,
-				Extended:  extended,
-				Created:   time.Now(),
+				Id:               id,
+				FeedUrl:          string(url),
+				FeedTitle:        string(feed.Title),
+				ItemBody:         item.Description,
+				ItemUrl:          item.Link,
+				Published:        item.Published,
+				ItemExtendedBody: itemExtended,
+				ItemRawHtml:      itemRawHtml,
+				ItemImage:        itemImage,
+				Created:          time.Now(),
 			})
 
-			log.Printf("Id=%v : Url=%v : Title=%v Extended (char count)=%v Item no: %d/%d", id, string(url), string(feed.Title), len(extended), i, sliceLength)
+			log.Printf("Id=%v : Url=%v : Title=%v Extended (char count)=%v Item no: %d/%d", id, string(url), string(feed.Title), len(itemExtended), i, sliceLength)
 		}(i)
 	}
 
@@ -132,6 +142,11 @@ func generateId(item *gofeed.Item) (string, error) {
 	}
 
 	return uuid.String(), nil
+}
+
+func extractArticle(url string) (*goose.Article, error) {
+	article, err := g.ExtractFromURL(url)
+	return article, err
 }
 
 func GetExtendedArticle(link string) (string, error) {
