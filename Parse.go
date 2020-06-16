@@ -38,7 +38,6 @@ type RrssFeed struct {
 	ItemBody         string
 	ItemUrl          string
 	ItemExtendedBody string
-	ItemRawHtml      string
 	Published        string
 	Created          time.Time
 }
@@ -72,7 +71,6 @@ func Parse(url string) ([]RrssFeed, error) {
 			}
 
 			itemExtended := ""
-			itemRawHtml := ""
 			itemImage := ""
 			// Fetch full article
 			itemUrl := item.Link
@@ -83,7 +81,6 @@ func Parse(url string) ([]RrssFeed, error) {
 					log.Println(err)
 				}
 				itemExtended = article.CleanedText
-				itemRawHtml = article.RawHTML
 				itemImage = article.TopImage
 
 				time.Sleep(1 * time.Second) // Wait for 1 second before getting next item
@@ -104,7 +101,6 @@ func Parse(url string) ([]RrssFeed, error) {
 				ItemUrl:          item.Link,
 				Published:        item.Published,
 				ItemExtendedBody: itemExtended,
-				ItemRawHtml:      itemRawHtml,
 				ItemImage:        itemImage,
 				Created:          time.Now(),
 			})
